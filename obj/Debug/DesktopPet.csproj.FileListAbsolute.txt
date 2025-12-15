@@ -1,0 +1,17 @@
+C:\Users\Vic\source\repos\DesktopPet\DesktopPet\bin\Debug\DesktopPet.exe.config
+C:\Users\Vic\source\repos\DesktopPet\DesktopPet\bin\Debug\DesktopPet.exe
+C:\Users\Vic\source\repos\DesktopPet\DesktopPet\bin\Debug\DesktopPet.pdb
+C:\Users\Vic\source\repos\DesktopPet\DesktopPet\bin\Debug\WpfAnimatedGif.xml
+C:\Users\Vic\source\repos\DesktopPet\DesktopPet\obj\Debug\DesktopPet.csprojAssemblyReference.cache
+C:\Users\Vic\source\repos\DesktopPet\DesktopPet\obj\Debug\MainWindow.baml
+C:\Users\Vic\source\repos\DesktopPet\DesktopPet\obj\Debug\MainWindow.g.cs
+C:\Users\Vic\source\repos\DesktopPet\DesktopPet\obj\Debug\App.g.cs
+C:\Users\Vic\source\repos\DesktopPet\DesktopPet\obj\Debug\DesktopPet_MarkupCompile.cache
+C:\Users\Vic\source\repos\DesktopPet\DesktopPet\obj\Debug\DesktopPet.g.resources
+C:\Users\Vic\source\repos\DesktopPet\DesktopPet\obj\Debug\DesktopPet.Properties.Resources.resources
+C:\Users\Vic\source\repos\DesktopPet\DesktopPet\obj\Debug\DesktopPet.csproj.GenerateResource.cache
+C:\Users\Vic\source\repos\DesktopPet\DesktopPet\obj\Debug\DesktopPet.csproj.CoreCompileInputs.cache
+C:\Users\Vic\source\repos\DesktopPet\DesktopPet\obj\Debug\DesktopPet.csproj.CopyComplete
+C:\Users\Vic\source\repos\DesktopPet\DesktopPet\obj\Debug\DesktopPet.exe
+C:\Users\Vic\source\repos\DesktopPet\DesktopPet\obj\Debug\DesktopPet.pdb
+C:\Users\Vic\source\repos\DesktopPet\DesktopPet\obj\Debug\DesktopPet.csproj.Fody.CopyLocal.cache
