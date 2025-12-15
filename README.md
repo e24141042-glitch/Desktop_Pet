@@ -28,11 +28,5 @@ A simple WPF application that creates an interactive desktop pet.
 - **Images:** Replace the `.gif` files in the `Images/` folder with your own animated GIFs. Ensure they have the same names (`idle.gif`, `sleep.gif`, `tired.gif`, `walk.gif`) or update the code to reference new filenames.
 - **Behavior:** Modify the `MainWindow.xaml.cs` file to change the pet's behavior, animations, and interactions.
 
-## Screenshot/GIF
-(To be added)
-
 ## Contributing
-(To be added)
-
-## License
-(To be added)
+- Vic
