@@ -17,35 +17,26 @@
 
     <StackPanel x:Name="MainStackPanel" VerticalAlignment="Bottom">
 
-        <!-- 血條與按鈕區 (水平排列) -->
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,5">
+        <!-- 狀態資訊區：血條 + 食物計數 (保留) -->
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,2">
             <!-- 血條 -->
             <ProgressBar x:Name="HealthBar"
-                         Width="60"
-                         Height="6"
+                         Width="50"
+                         Height="8"
                          Visibility="Visible"
                          Foreground="#76c442"
                          Background="#555555"
                          BorderBrush="Black"
-                         BorderThickness="1"/>
+                         BorderThickness="1"
+                         ToolTip="體力值"/>
 
-            <!-- [新增] 召喚小球的紅色按鈕 -->
-            <Button x:Name="BallButton"
-                    Width="10" 
-                    Height="10"
-                    Margin="5,0,0,0"
-                    Background="Red"
-                    BorderBrush="DarkRed"
-                    Click="BallButton_Click">
-                <Button.Template>
-                    <ControlTemplate TargetType="Button">
-                        <Grid>
-                            <Ellipse Fill="{TemplateBinding Background}" Stroke="{TemplateBinding BorderBrush}" StrokeThickness="1"/>
-                        </Grid>
-                    </ControlTemplate>
-                </Button.Template>
-            </Button>
+            <!-- 食物數量 -->
+            <Border Background="#FFFFE0" CornerRadius="5" BorderBrush="Orange" BorderThickness="1" Margin="5,0,0,0" Padding="3,0">
+                <TextBlock x:Name="FoodCountText" Text="🍎 0" FontSize="10" FontWeight="Bold" VerticalAlignment="Center" Foreground="#D2691E"/>
+            </Border>
         </StackPanel>
+
+        <!-- [修改] 原本的按鈕區已移除，功能移至右鍵選單 -->
 
         <Image x:Name="PetImage" 
                Height="120"

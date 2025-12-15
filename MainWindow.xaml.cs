@@ -1,9 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO; // Stream 需要這個
+using System.IO;
 using System.Linq;
-using System.Reflection; // 用於讀取內嵌資源 (Assembly)
+using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -30,6 +30,9 @@ namespace DesktopPet
         private DispatcherTimer aiTimer;
         private DispatcherTimer physicsTimer;
 
+        // [新增] 成長計時器
+        private DispatcherTimer growthTimer;
+
         private List<BallWindow> balls = new List<BallWindow>();
 
         private PetState currentState = PetState.Idle;
@@ -41,12 +44,18 @@ namespace DesktopPet
         private double bounce = -0.4;
         private double walkSpeed = 2.5;
         private int walkDirection = 1;
-        private double scale = 0.5;
+        private double scale = 0.5;       // 預設成體大小
         private int tickCounter = 0;
 
         private int currentHealth = 100;
         private const int MaxHealth = 100;
-        private const int HealthDecreaseAmount = 10;
+
+        private int foodCount = 0;
+        private const int HealthGainPerFood = 30;
+
+        private int fedTimes = 0;
+
+        private const int HealthDecreaseAmount = 5;
         private const int TiredThreshold = 50;
         private const int ExhaustedThreshold = 10;
 
@@ -65,18 +74,25 @@ namespace DesktopPet
         {
             try
             {
-                // 在 MainWindow_Loaded 的 try區塊開頭加入：
-                this.Icon = LoadImageFromResource("idle.gif");
-                // 注意：這裡可以直接用 gif 當視窗圖示，WPF 會自動處理
-                // [新增] 建立右鍵選單 (Context Menu) 以便關閉程式
                 ContextMenu menu = new ContextMenu();
+
+                MenuItem feedItem = new MenuItem();
+                feedItem.Header = "🍗 餵食 (Feed)";
+                feedItem.Click += FeedPet;
+                menu.Items.Add(feedItem);
+
+                MenuItem ballItem = new MenuItem();
+                ballItem.Header = "🔴 生成食物球 (Catch Ball)";
+                ballItem.Click += SpawnFoodBall;
+                menu.Items.Add(ballItem);
+
+                menu.Items.Add(new Separator());
+
                 MenuItem exitItem = new MenuItem();
-                exitItem.Header = "關閉寵物 (Exit)";
-                exitItem.Click += (s, args) =>
-                {
-                    Application.Current.Shutdown();
-                };
+                exitItem.Header = "❌ 關閉寵物 (Exit)";
+                exitItem.Click += (s, args) => { this.Close(); };
                 menu.Items.Add(exitItem);
+
                 this.ContextMenu = menu;
 
                 cpuCounter = new PerformanceCounter("Processor", "% Processor Time", "_Total");
@@ -92,11 +108,13 @@ namespace DesktopPet
                 physicsTimer.Tick += PhysicsTimer_Tick;
                 physicsTimer.Start();
 
+                // 套用目前的縮放比例 (如果是新生兒，scale 已經被改成 0.2 了)
                 MainStackPanel.LayoutTransform = new ScaleTransform(scale, scale);
                 PetImage.RenderTransformOrigin = new Point(0.5, 0.5);
 
                 HealthBar.Maximum = MaxHealth;
                 HealthBar.Value = currentHealth;
+                UpdateStatusUI();
 
                 UpdateState(PetState.Idle);
                 ForceToBottomRight();
@@ -109,16 +127,123 @@ namespace DesktopPet
             }
         }
 
-        private void BallButton_Click(object sender, RoutedEventArgs e)
+        private void UpdateStatusUI()
+        {
+            HealthBar.ToolTip = $"體力: {currentHealth}/{MaxHealth}\n食物: {foodCount} 🍎\n已餵食: {fedTimes}/3 (繁殖進度)\n體型: {scale:F1}";
+        }
+
+        private void SpawnFoodBall(object sender, RoutedEventArgs e)
         {
             var ball = new BallWindow();
+
+            ball.BallCaught += () =>
+            {
+                foodCount++;
+                UpdateStatusUI();
+                this.Title = "抓到了！食物+1";
+            };
+
             ball.Show();
             balls.Add(ball);
+        }
+
+        private void FeedPet(object sender, RoutedEventArgs e)
+        {
+            if (foodCount > 0)
+            {
+                if (currentHealth >= MaxHealth)
+                {
+                    MessageBox.Show("我已經吃飽了！(HP 滿)", "飽飽的");
+                    return;
+                }
+
+                foodCount--;
+
+                currentHealth = Math.Min(MaxHealth, currentHealth + HealthGainPerFood);
+                HealthBar.Value = currentHealth;
+
+                fedTimes++;
+                if (fedTimes >= 3)
+                {
+                    fedTimes = 0;
+                    SpawnNewPet(); // 繁殖！
+                }
+
+                UpdateStatusUI();
+
+                if (currentState == PetState.Sleeping || currentState == PetState.Tired)
+                {
+                    UpdateState(PetState.Idle);
+                }
+            }
+            else
+            {
+                MessageBox.Show("沒有食物了！\n請點擊右鍵「生成食物球」，然後在螢幕上抓住它！", "肚子餓");
+            }
+        }
+
+        private void SpawnNewPet()
+        {
+            try
+            {
+                MainWindow newPet = new MainWindow();
+
+                // [關鍵修改] 將新寵物設定為新生兒狀態
+                newPet.SetAsNewborn();
+
+                newPet.Left = this.Left - 50;
+                newPet.Top = this.Top;
+
+                newPet.Show();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("繁殖失敗: " + ex.Message);
+            }
+        }
+
+        // [新增] 設定為新生兒並啟動成長邏輯
+        public void SetAsNewborn()
+        {
+            this.scale = 0.2; // 初始大小設為 0.2
+
+            // 初始化成長計時器
+            growthTimer = new DispatcherTimer();
+            growthTimer.Interval = TimeSpan.FromMinutes(30); // 每 30 分鐘長大一次
+            growthTimer.Tick += (s, e) =>
+            {
+                if (scale < 0.6)
+                {
+                    scale += 0.1;
+
+                    // 簡單的浮點數校正 (避免 0.3000000004 這種情況)
+                    if (scale > 0.59 && scale < 0.61) scale = 0.6;
+
+                    // 更新 UI 縮放
+                    MainStackPanel.LayoutTransform = new ScaleTransform(scale, scale);
+                    UpdateStatusUI(); // 更新 Tooltip 顯示的體型
+
+                    // 檢查是否達到上限
+                    if (scale >= 0.6)
+                    {
+                        scale = 0.6;
+                        growthTimer.Stop(); // 停止成長
+                        Debug.WriteLine("寵物已長大成型 (Scale 0.6)");
+                    }
+                    else
+                    {
+                        Debug.WriteLine($"寵物長大中... 目前 Scale: {scale}");
+                    }
+                }
+            };
+            growthTimer.Start();
         }
 
         private void AiTimer_Tick(object sender, EventArgs e)
         {
             if (isDragging || velocityY != 0 || currentState == PetState.ReturningHome) return;
+
+            if (currentState == PetState.Sleeping && currentHealth < MaxHealth) return;
 
             bool isChasingBall = balls.Any() && currentHealth > ExhaustedThreshold;
 
@@ -204,7 +329,7 @@ namespace DesktopPet
 
                 if (currentState == PetState.Walking || currentState == PetState.Tired)
                 {
-                    currentHealth = Math.Max(0, currentHealth - 5);
+                    currentHealth = Math.Max(0, currentHealth - 2);
                     if (currentHealth <= ExhaustedThreshold) UpdateState(PetState.Sleeping);
                     else if (currentState == PetState.Walking && currentHealth <= TiredThreshold) UpdateState(PetState.Tired);
                 }
@@ -219,10 +344,20 @@ namespace DesktopPet
                 }
                 else if (currentState == PetState.Sleeping)
                 {
-                    if (currentHealth < MaxHealth) currentHealth = Math.Min(MaxHealth, currentHealth + 5);
+                    if (currentHealth < MaxHealth)
+                    {
+                        currentHealth = Math.Min(MaxHealth, currentHealth + 5);
+                    }
+
+                    if (currentHealth >= MaxHealth)
+                    {
+                        Debug.WriteLine("體力已滿，立即起床");
+                        UpdateState(PetState.Idle);
+                    }
                 }
 
                 HealthBar.Value = currentHealth;
+                UpdateStatusUI();
             }
 
             if (balls.Any() && currentHealth > ExhaustedThreshold && (currentState == PetState.Walking || currentState == PetState.Tired || currentState == PetState.Idle))
@@ -283,7 +418,7 @@ namespace DesktopPet
                     this.Top = floorY;
                     velocityY = (Math.Abs(velocityY) > 2) ? velocityY * bounce : 0;
 
-                    if (currentState == PetState.Sleeping && currentHealth > ExhaustedThreshold)
+                    if (currentState == PetState.Sleeping && currentHealth >= MaxHealth)
                     {
                         UpdateState(PetState.Idle);
                     }
@@ -335,7 +470,6 @@ namespace DesktopPet
             PetImage.RenderTransform = transform;
         }
 
-        // 讀取內嵌資源的方法
         private BitmapImage LoadImageFromResource(string imageName)
         {
             string resourceName = $"DesktopPet.Images.{imageName}";
@@ -409,12 +543,9 @@ namespace DesktopPet
             velocityY = 0;
             Point startPoint = new Point(this.Left, this.Top);
 
-            if (currentHealth > ExhaustedThreshold)
+            if (currentState != PetState.Sleeping || currentHealth >= MaxHealth)
             {
-                if (currentState == PetState.Walking || currentState == PetState.Sleeping || currentState == PetState.ReturningHome || currentState == PetState.Tired)
-                {
-                    UpdateState(PetState.Idle);
-                }
+                UpdateState(PetState.Idle);
             }
 
             try
@@ -434,6 +565,9 @@ namespace DesktopPet
         {
             currentHealth = Math.Max(0, currentHealth - amount);
             HealthBar.Value = currentHealth;
+
+            UpdateStatusUI();
+
             if (currentHealth > ExhaustedThreshold) UpdateState(PetState.ReturningHome);
             else UpdateState(PetState.Sleeping);
         }
@@ -452,6 +586,8 @@ namespace DesktopPet
     {
         public double VelocityX { get; set; }
         public double VelocityY { get; set; }
+
+        public event Action BallCaught;
 
         private const double Gravity = 0.5;
         private const double Elasticity = 0.9;
@@ -492,6 +628,12 @@ namespace DesktopPet
                 VerticalAlignment = VerticalAlignment.Top
             });
             this.Content = grid;
+
+            this.MouseLeftButtonDown += (s, e) =>
+            {
+                BallCaught?.Invoke();
+                this.Close();
+            };
 
             var workArea = SystemParameters.WorkArea;
             this.Left = workArea.Width - 100;
