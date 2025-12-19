@@ -29,6 +29,7 @@ namespace DesktopPet
         private PerformanceCounter cpuCounter;
         private DispatcherTimer aiTimer;
         private DispatcherTimer physicsTimer;
+        private static readonly List<MainWindow> ActivePets = new List<MainWindow>();
 
         // [新增] 成長計時器
         private DispatcherTimer growthTimer;
@@ -44,11 +45,12 @@ namespace DesktopPet
         private double bounce = -0.4;
         private double walkSpeed = 2.5;
         private int walkDirection = 1;
-        private double scale = 0.5;       // 預設成體大小
+        private double scale = 0.5;
         private int tickCounter = 0;
+        
 
         private int currentHealth = 100;
-        private const int MaxHealth = 100;
+        public int MaxHealth { get; private set; } = 100;
 
         private int foodCount = 0;
         private const int HealthGainPerFood = 30;
@@ -57,23 +59,33 @@ namespace DesktopPet
 
         private const int HealthDecreaseAmount = 5;
         private const int TiredThreshold = 50;
-        private const int ExhaustedThreshold = 10;
+        private const int ExhaustedThreshold = 20;
 
         private const float HighCpuThreshold = 60.0f;
         private int bottomMargin = 0;
         private int visualFloorOffset = 0;
+        private string speciesName = "Default";
 
         public MainWindow()
         {
             InitializeComponent();
+
+            // [新增] 個體差異初始化
+            MaxHealth = random.Next(80, 200);
+            currentHealth = MaxHealth;
+            walkSpeed = random.NextDouble() * 3 + 1; // 1.0 ~ 4.0
+            scale = random.NextDouble() * 0.4 + 0.4; // 0.4 ~ 0.8 (如果不是新生兒)
+
             this.Loaded += MainWindow_Loaded;
-            this.Closed += (s, e) => { foreach (var b in balls) b.Close(); };
+            this.Closed += (s, e) => { ActivePets.Remove(this); foreach (var b in balls) b.Close(); };
         }
 
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
             try
             {
+                ActivePets.Add(this);
+                speciesName = ChooseSpecies();
                 ContextMenu menu = new ContextMenu();
 
                 MenuItem feedItem = new MenuItem();
@@ -85,6 +97,21 @@ namespace DesktopPet
                 ballItem.Header = "🔴 生成食物球 (Catch Ball)";
                 ballItem.Click += SpawnFoodBall;
                 menu.Items.Add(ballItem);
+
+                MenuItem scatterItem = new MenuItem();
+                scatterItem.Header = "✨ 潑灑食物 (Scatter Food)";
+                scatterItem.Click += ScatterFood;
+                menu.Items.Add(scatterItem);
+
+                MenuItem speciesRoot = new MenuItem();
+                speciesRoot.Header = "🦄 切換物種 (Switch Species)";
+                BuildSpeciesMenu(speciesRoot);
+                menu.Items.Add(speciesRoot);
+
+                MenuItem swarmItem = new MenuItem();
+                swarmItem.Header = "👨‍👩‍👧‍👦 召喚夥伴 (Summon Swarm)";
+                swarmItem.Click += SummonSwarm;
+                menu.Items.Add(swarmItem);
 
                 menu.Items.Add(new Separator());
 
@@ -108,12 +135,17 @@ namespace DesktopPet
                 physicsTimer.Tick += PhysicsTimer_Tick;
                 physicsTimer.Start();
 
-                // 套用目前的縮放比例 (如果是新生兒，scale 已經被改成 0.2 了)
-                MainStackPanel.LayoutTransform = new ScaleTransform(scale, scale);
-                PetImage.RenderTransformOrigin = new Point(0.5, 0.5);
+                var _panel = GetMainStackPanel();
+                if (_panel != null) _panel.LayoutTransform = new ScaleTransform(scale, scale);
+                var _img = GetPetImage();
+                if (_img != null) _img.RenderTransformOrigin = new Point(0.5, 0.5);
 
-                HealthBar.Maximum = MaxHealth;
-                HealthBar.Value = currentHealth;
+                var _hb = GetHealthBar();
+                if (_hb != null)
+                {
+                    _hb.Maximum = MaxHealth;
+                    _hb.Value = currentHealth;
+                }
                 UpdateStatusUI();
 
                 UpdateState(PetState.Idle);
@@ -129,12 +161,46 @@ namespace DesktopPet
 
         private void UpdateStatusUI()
         {
-            HealthBar.ToolTip = $"體力: {currentHealth}/{MaxHealth}\n食物: {foodCount} 🍎\n已餵食: {fedTimes}/3 (繁殖進度)\n體型: {scale:F1}";
+            var _hb = GetHealthBar();
+            if (_hb != null)
+                _hb.ToolTip = $"體力: {currentHealth}/{MaxHealth}\n食物: {foodCount} 🍎\n已餵食: {fedTimes}/3 (繁殖進度)\n體型: {scale:F1}";
+        }
+
+        private void SummonSwarm(object sender, RoutedEventArgs e)
+        {
+            if (ActivePets.Count >= 20)
+            {
+                MessageBox.Show("寵物太多了！最多只能有 20 隻。");
+                return;
+            }
+
+            int count = 5;
+            for (int i = 0; i < count; i++)
+            {
+                if (ActivePets.Count >= 20) break;
+                SpawnNewPet(true);
+            }
+        }
+
+        private void ScatterFood(object sender, RoutedEventArgs e)
+        {
+            var area = SystemParameters.WorkArea;
+            int count = 15;
+            for (int i = 0; i < count; i++)
+            {
+                var ball = new BallWindow(true);
+                ball.Left = random.Next(0, (int)(area.Width - 80));
+                ball.Top = random.Next(-80, 0);
+                ball.VelocityX = random.Next(-3, 4);
+                ball.VelocityY = random.Next(2, 8);
+                ball.Show();
+                balls.Add(ball);
+            }
         }
 
         private void SpawnFoodBall(object sender, RoutedEventArgs e)
         {
-            var ball = new BallWindow();
+            var ball = new BallWindow(false);
 
             ball.BallCaught += () =>
             {
@@ -166,7 +232,7 @@ namespace DesktopPet
                 if (fedTimes >= 3)
                 {
                     fedTimes = 0;
-                    SpawnNewPet(); // 繁殖！
+                    SpawnNewPet(false); // 繁殖！
                 }
 
                 UpdateStatusUI();
@@ -182,17 +248,36 @@ namespace DesktopPet
             }
         }
 
-        private void SpawnNewPet()
+        private void SpawnNewPet(bool isRandom = false)
         {
+            if (ActivePets.Count >= 20)
+            {
+                Debug.WriteLine("已達最大數量 20，無法繁殖");
+                return;
+            }
+
             try
             {
                 MainWindow newPet = new MainWindow();
+                newPet.SetSpecies(this.speciesName);
 
-                // [關鍵修改] 將新寵物設定為新生兒狀態
-                newPet.SetAsNewborn();
+                if (!isRandom)
+                {
+                    // [關鍵修改] 將新寵物設定為新生兒狀態
+                    newPet.SetAsNewborn();
+                }
+                else
+                {
+                     // 隨機生成成體
+                     newPet.Left = random.Next(0, (int)SystemParameters.PrimaryScreenWidth - 100);
+                     newPet.Top = random.Next(0, (int)SystemParameters.PrimaryScreenHeight - 100);
+                }
 
-                newPet.Left = this.Left - 50;
-                newPet.Top = this.Top;
+                if (!isRandom)
+                {
+                    newPet.Left = this.Left - 50;
+                    newPet.Top = this.Top;
+                }
 
                 newPet.Show();
             }
@@ -220,7 +305,8 @@ namespace DesktopPet
                     if (scale > 0.59 && scale < 0.61) scale = 0.6;
 
                     // 更新 UI 縮放
-                    MainStackPanel.LayoutTransform = new ScaleTransform(scale, scale);
+                    var _panel = GetMainStackPanel();
+                    if (_panel != null) _panel.LayoutTransform = new ScaleTransform(scale, scale);
                     UpdateStatusUI(); // 更新 Tooltip 顯示的體型
 
                     // 檢查是否達到上限
@@ -319,8 +405,41 @@ namespace DesktopPet
 
             if (isDragging) return;
 
+            // --- Pet Collision Detection ---
+            foreach (var otherPet in ActivePets.Where(p => p != this))
+            {
+                if (!otherPet.IsLoaded) continue;
+
+                Rect thisRect = new Rect(this.Left, this.Top, this.ActualWidth, this.ActualHeight);
+                Rect otherRect = new Rect(otherPet.Left, otherPet.Top, otherPet.ActualWidth, otherPet.ActualHeight);
+
+                if (thisRect.IntersectsWith(otherRect))
+                {
+                    Vector pushVector = new Vector(this.Left - otherPet.Left, this.Top - otherPet.Top);
+
+                    if (pushVector.Length < 1) // Exactly overlapping or too close
+                    {
+                        pushVector = new Vector(random.Next(-5, 5), random.Next(-5, 0));
+                    }
+
+                    pushVector.Normalize();
+                    
+                    double pushAmount = 2.0;
+                    this.Left += pushVector.X * pushAmount;
+                    this.Top += pushVector.Y * pushAmount;
+                    
+                    if (this.Top < otherPet.Top && velocityY > 0)
+                    {
+                        velocityY *= -0.1;
+                    }
+                }
+            }
+            // --- End Pet Collision ---
+
+
             var workArea = SystemParameters.WorkArea;
-            double floorY = workArea.Height - this.ActualHeight - bottomMargin + visualFloorOffset;
+            double baseFloorY = workArea.Height - this.ActualHeight - bottomMargin + visualFloorOffset;
+            double floorY = baseFloorY;
 
             tickCounter++;
             if (tickCounter >= 60)
@@ -356,7 +475,8 @@ namespace DesktopPet
                     }
                 }
 
-                HealthBar.Value = currentHealth;
+                var _hb = GetHealthBar();
+                if (_hb != null) _hb.Value = currentHealth;
                 UpdateStatusUI();
             }
 
@@ -385,16 +505,31 @@ namespace DesktopPet
 
                     if (petRect.IntersectsWith(ballRect))
                     {
-                        Vector kickDir = new Vector(ballX - petCenterX, ballY - petCenterY);
-                        kickDir.Normalize();
-                        if (double.IsNaN(kickDir.X) || double.IsNaN(kickDir.Y))
-                            kickDir = new Vector(random.NextDouble() - 0.5, -1);
+                        if (ball.IsFood)
+                        {
+                            // 吃到食物：成長 + 回血
+                            ball.Close();
+                            scale = Math.Min(2.0, scale + 0.05); // 最大2.0
+                            var _panel = GetMainStackPanel();
+                            if (_panel != null) _panel.LayoutTransform = new ScaleTransform(scale, scale);
+                            currentHealth = Math.Min(MaxHealth, currentHealth + 20);
+                            var _hb2 = GetHealthBar();
+                            if (_hb2 != null) _hb2.Value = currentHealth;
+                            UpdateStatusUI();
+                        }
+                        else
+                        {
+                            Vector kickDir = new Vector(ballX - petCenterX, ballY - petCenterY);
+                            kickDir.Normalize();
+                            if (double.IsNaN(kickDir.X) || double.IsNaN(kickDir.Y))
+                                kickDir = new Vector(random.NextDouble() - 0.5, -1);
 
-                        ball.Kick(kickDir * 40);
+                            ball.Kick(kickDir * 40);
+                        }
                     }
                 }
 
-                if (closestBall != null)
+                if (closestBall != null && !closestBall.IsFood)
                 {
                     double ballX = closestBall.Left + (closestBall.Width / 2);
                     if (Math.Abs(ballX - petCenterX) > 10)
@@ -448,8 +583,8 @@ namespace DesktopPet
                             return;
                         }
                     }
-                    else
-                    {
+                else
+                {
                         this.Left += currentSpeed * walkDirection;
 
                         if (this.Left <= 0) walkDirection = 1;
@@ -462,12 +597,16 @@ namespace DesktopPet
             this.Topmost = true;
         }
 
+        
+
+
         private void UpdateDirectionTransform(int direction)
         {
             var transform = new ScaleTransform();
             transform.ScaleX = direction == 1 ? -1 : 1;
             transform.ScaleY = 1;
-            PetImage.RenderTransform = transform;
+            var img = GetPetImage();
+            if (img != null) img.RenderTransform = transform;
         }
 
         private BitmapImage LoadImageFromResource(string imageName)
@@ -501,6 +640,102 @@ namespace DesktopPet
             }
         }
 
+        
+
+        private Image GetPetImage()
+        {
+            return this.FindName("PetImage") as Image;
+        }
+
+        private Image GetPetImage(MainWindow w)
+        {
+            return w.FindName("PetImage") as Image;
+        }
+
+        private ProgressBar GetHealthBar()
+        {
+            return this.FindName("HealthBar") as ProgressBar;
+        }
+
+        private StackPanel GetMainStackPanel()
+        {
+            return this.FindName("MainStackPanel") as StackPanel;
+        }
+
+        private string ChooseSpecies()
+        {
+            try
+            {
+                string imagesPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Images");
+                if (!System.IO.Directory.Exists(imagesPath)) return "Default";
+                var dirs = System.IO.Directory.GetDirectories(imagesPath).Select(System.IO.Path.GetFileName).ToList();
+                if (dirs == null || dirs.Count == 0) return "Default";
+                return dirs[random.Next(0, dirs.Count)];
+            }
+            catch
+            {
+                return "Default";
+            }
+        }
+
+        private void BuildSpeciesMenu(MenuItem root)
+        {
+            root.Items.Clear();
+            var all = new List<string> { "Default" };
+            string imagesPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Images");
+            if (System.IO.Directory.Exists(imagesPath))
+            {
+                all.AddRange(System.IO.Directory.GetDirectories(imagesPath).Select(System.IO.Path.GetFileName));
+            }
+            foreach (var name in all.Distinct())
+            {
+                var mi = new MenuItem { Header = name, IsCheckable = true, IsChecked = name == speciesName };
+                mi.Click += (s, e) => { SetSpecies(name); UpdateState(currentState); BuildSpeciesMenu(root); };
+                root.Items.Add(mi);
+            }
+        }
+
+        public void SetSpecies(string name)
+        {
+            speciesName = string.IsNullOrWhiteSpace(name) ? "Default" : name;
+        }
+
+        private BitmapImage LoadSpeciesImage(string imageName)
+        {
+            try
+            {
+                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                string path1 = System.IO.Path.Combine(baseDir, "Images", speciesName, imageName);
+                if (System.IO.File.Exists(path1))
+                {
+                    var img = new BitmapImage();
+                    img.BeginInit();
+                    img.UriSource = new Uri(path1, UriKind.Absolute);
+                    img.CacheOption = BitmapCacheOption.OnLoad;
+                    img.EndInit();
+                    img.Freeze();
+                    return img;
+                }
+                string path2 = System.IO.Path.Combine(baseDir, "Images", imageName);
+                if (System.IO.File.Exists(path2))
+                {
+                    var img = new BitmapImage();
+                    img.BeginInit();
+                    img.UriSource = new Uri(path2, UriKind.Absolute);
+                    img.CacheOption = BitmapCacheOption.OnLoad;
+                    img.EndInit();
+                    img.Freeze();
+                    return img;
+                }
+                return null;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"載入物種圖片失敗: {ex.Message}");
+                return null;
+            }
+        }
+
         private void UpdateState(PetState newState)
         {
             currentState = newState;
@@ -517,7 +752,11 @@ namespace DesktopPet
                 case PetState.Tired: imageName = "tired.gif"; break;
             }
 
-            var imageBitmap = LoadImageFromResource(imageName);
+            var imageBitmap = LoadSpeciesImage(imageName);
+            if (imageBitmap == null)
+            {
+                imageBitmap = LoadImageFromResource(imageName);
+            }
 
             if (imageBitmap == null)
             {
@@ -526,14 +765,19 @@ namespace DesktopPet
 
             if (imageBitmap == null) return;
 
-            if (ImageBehavior.GetAnimatedSource(PetImage) != imageBitmap)
+            var _img = GetPetImage();
+            if (_img != null)
             {
-                ImageBehavior.SetAnimatedSource(PetImage, imageBitmap);
+                if (ImageBehavior.GetAnimatedSource(_img) != imageBitmap)
+                {
+                    ImageBehavior.SetAnimatedSource(_img, imageBitmap);
+                }
             }
 
             if (currentState != PetState.Walking && currentState != PetState.ReturningHome && currentState != PetState.Tired)
             {
-                PetImage.RenderTransform = new ScaleTransform { ScaleX = 1, ScaleY = 1 };
+                var __img = GetPetImage();
+                if (__img != null) __img.RenderTransform = new ScaleTransform { ScaleX = 1, ScaleY = 1 };
             }
         }
 
@@ -582,117 +826,5 @@ namespace DesktopPet
         }
     }
 
-    public class BallWindow : Window
-    {
-        public double VelocityX { get; set; }
-        public double VelocityY { get; set; }
-
-        public event Action BallCaught;
-
-        private const double Gravity = 0.5;
-        private const double Elasticity = 0.9;
-        private const double Friction = 0.995;
-        private const double GroundFriction = 0.98;
-
-        private DispatcherTimer lifeTimer;
-
-        public BallWindow()
-        {
-            this.WindowStyle = WindowStyle.None;
-            this.AllowsTransparency = true;
-            this.Background = Brushes.Transparent;
-            this.Topmost = true;
-            this.ShowInTaskbar = false;
-            this.Width = 10;
-            this.Height = 10;
-            this.ResizeMode = ResizeMode.NoResize;
-
-            var ball = new Ellipse
-            {
-                Fill = Brushes.Red,
-                Stroke = Brushes.DarkRed,
-                StrokeThickness = 2,
-                Width = 10,
-                Height = 10
-            };
-
-            var grid = new Grid();
-            grid.Children.Add(ball);
-            grid.Children.Add(new Ellipse
-            {
-                Width = 3,
-                Height = 3,
-                Fill = new SolidColorBrush(Color.FromArgb(100, 255, 255, 255)),
-                Margin = new Thickness(2, 2, 0, 0),
-                HorizontalAlignment = HorizontalAlignment.Left,
-                VerticalAlignment = VerticalAlignment.Top
-            });
-            this.Content = grid;
-
-            this.MouseLeftButtonDown += (s, e) =>
-            {
-                BallCaught?.Invoke();
-                this.Close();
-            };
-
-            var workArea = SystemParameters.WorkArea;
-            this.Left = workArea.Width - 100;
-            this.Top = 0;
-
-            var rnd = new Random();
-            VelocityX = rnd.Next(-15, -5);
-            VelocityY = rnd.Next(-5, 5);
-
-            lifeTimer = new DispatcherTimer();
-            lifeTimer.Interval = TimeSpan.FromMinutes(10);
-            lifeTimer.Tick += (s, e) => { this.Close(); };
-            lifeTimer.Start();
-        }
-
-        public void UpdatePhysics()
-        {
-            var workArea = SystemParameters.WorkArea;
-
-            VelocityY += Gravity;
-            this.Left += VelocityX;
-            this.Top += VelocityY;
-
-            VelocityX *= Friction;
-            VelocityY *= Friction;
-
-            if (this.Top + this.Height > workArea.Height)
-            {
-                this.Top = workArea.Height - this.Height;
-                VelocityY = -VelocityY * Elasticity;
-                VelocityX *= GroundFriction;
-            }
-            else if (this.Top < 0)
-            {
-                this.Top = 0;
-                VelocityY = -VelocityY * Elasticity;
-            }
-
-            if (this.Left + this.Width > workArea.Width)
-            {
-                this.Left = workArea.Width - this.Width;
-                VelocityX = -VelocityX * Elasticity;
-            }
-            else if (this.Left < 0)
-            {
-                this.Left = 0;
-                VelocityX = -VelocityX * Elasticity;
-            }
-
-            if (Math.Abs(VelocityY) < 0.5 && this.Top > workArea.Height - this.Height - 2)
-            {
-                VelocityY = 0;
-            }
-        }
-
-        public void Kick(Vector velocity)
-        {
-            this.VelocityX = velocity.X;
-            this.VelocityY = velocity.Y;
-        }
-    }
+    
 }

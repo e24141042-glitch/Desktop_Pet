@@ -59,3 +59,10 @@ FxCopReport.xml
 
 # Fody
 FodyWeavers.xml
+
+# Custom ignores
+*.log
+*.binlog
+build_out.txt
+build_output.txt
+backup_*/

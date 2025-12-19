@@ -1,10 +1,35 @@
 # DesktopPet
 
-A simple WPF application that creates an interactive desktop pet.
+A sophisticated virtual pet simulator for your desktop, built with C# and WPF.
 
 ## Features
-- Displays an animated GIF as a desktop pet.
-- Customizable animations (idle, sleep, tired, walk).
+
+This application brings a dynamic, interactive pet to your desktop with a rich set of features:
+
+### State Management & Behavior
+*   **Complex State System**: The pet's behavior is governed by a state machine, transitioning between states like `Idle`, `Walking`, `Sleeping`, `Tired`, and `ReturningHome`.
+*   **AI-Driven Decisions**: A timer-based "brain" makes high-level decisions, influencing the pet's state based on factors like health, system CPU usage, and random chance.
+*   **Physics Simulation**: A high-frequency physics engine simulates gravity, bouncing, and movement, including collision detection with screen edges.
+
+### Health & Growth
+*   **Health System**: The pet's health decreases with activity and increases with rest or feeding. Low health triggers `Tired` and `Sleeping` states to recover.
+*   **Growth & Reproduction**: After being fed a certain number of times (by collecting food), the pet can reproduce, spawning a new, smaller "newborn" pet that grows over time.
+
+### Customization and Interaction
+*   **Dynamic Appearances**: You can switch the pet's "species" at runtime, which loads different sets of GIF animations from the `Images` folder.
+*   **Multiple Instances**: The application supports multiple pets on screen at once, each with its own unique attributes.
+*   **Interactive Context Menu**: Right-click the pet to access a menu with options to:
+    *   Feed the pet
+    *   Spawn interactive balls
+    *   Change its species
+    *   Summon more pets
+    *   Close the application
+
+### Interactive Elements
+The application includes interactive objects that both the user and the pet can engage with:
+
+*   **Red Ball (Toy/Collectible)**: The pet can "kick" this ball around. The user can click to "catch" it, which functions as a mini-game to earn food.
+*   **Orange Ball (Food)**: The pet can "eat" this ball on contact to regain health and grow larger.
 
 ## Technologies Used
 - C#
@@ -25,8 +50,8 @@ A simple WPF application that creates an interactive desktop pet.
 4. Run the application (usually by pressing F5 in Visual Studio).
 
 ## Customization
-- **Images:** Replace the `.gif` files in the `Images/` folder with your own animated GIFs. Ensure they have the same names (`idle.gif`, `sleep.gif`, `tired.gif`, `walk.gif`) or update the code to reference new filenames.
-- **Behavior:** Modify the `MainWindow.xaml.cs` file to change the pet's behavior, animations, and interactions.
+- **Images:** To create your own pet species, add a new folder in the `Images/` directory. Place your custom `.gif` files inside, ensuring they have the standard names (`idle.gif`, `sleep.gif`, `tired.gif`, `walk.gif`). You can then switch to your new species via the pet's right-click context menu.
+- **Behavior:** Modify the `MainWindow.xaml.cs` file to change the pet's core behavior, physics, and interactions.
 
 ## Screenshot/GIF
 (To be added)
