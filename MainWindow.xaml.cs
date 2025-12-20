@@ -12,6 +12,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 using WpfAnimatedGif;
+using DesktopPet;
 
 namespace DesktopPet
 {
@@ -406,31 +407,96 @@ namespace DesktopPet
             if (isDragging) return;
 
             // --- Pet Collision Detection ---
-            foreach (var otherPet in ActivePets.Where(p => p != this))
+            // Process each pair of pets exactly once
+            for (int i = 0; i < ActivePets.Count; i++)
             {
-                if (!otherPet.IsLoaded) continue;
+                MainWindow pet1 = ActivePets[i];
+                if (!pet1.IsLoaded) continue;
 
-                Rect thisRect = new Rect(this.Left, this.Top, this.ActualWidth, this.ActualHeight);
-                Rect otherRect = new Rect(otherPet.Left, otherPet.Top, otherPet.ActualWidth, otherPet.ActualHeight);
-
-                if (thisRect.IntersectsWith(otherRect))
+                for (int j = i + 1; j < ActivePets.Count; j++) // Start from i + 1 to avoid self-collision and duplicate pairs
                 {
-                    Vector pushVector = new Vector(this.Left - otherPet.Left, this.Top - otherPet.Top);
+                    MainWindow pet2 = ActivePets[j];
+                    if (!pet2.IsLoaded) continue;
 
-                    if (pushVector.Length < 1) // Exactly overlapping or too close
+                    // Now pet1 and pet2 are the two pets in the pair.
+                    // This is where we call CheckPixelCollision and apply forces.
+                    if (CollisionHelper.CheckPixelCollision(pet1, pet2))
                     {
-                        pushVector = new Vector(random.Next(-5, 5), random.Next(-5, 0));
-                    }
+                        // Calculate bounding boxes again to get intersection details for push logic
+                        Rect rect1 = new Rect(pet1.Left, pet1.Top, pet1.ActualWidth, pet1.ActualHeight);
+                        Rect rect2 = new Rect(pet2.Left, pet2.Top, pet2.ActualWidth, pet2.ActualHeight);
+                        Rect intersection = Rect.Intersect(rect1, rect2);
 
-                    pushVector.Normalize();
-                    
-                    double pushAmount = 2.0;
-                    this.Left += pushVector.X * pushAmount;
-                    this.Top += pushVector.Y * pushAmount;
-                    
-                    if (this.Top < otherPet.Top && velocityY > 0)
-                    {
-                        velocityY *= -0.1;
+                        if (intersection.IsEmpty) continue; 
+
+                        // --- NEW PUSH AMOUNT CALCULATION ---
+                        // 1. Calculate centers
+                        Point center1 = new Point(pet1.Left + pet1.ActualWidth / 2, pet1.Top + pet1.ActualHeight / 2);
+                        Point center2 = new Point(pet2.Left + pet2.ActualWidth / 2, pet2.Top + pet2.ActualHeight / 2);
+
+                        // 2. Calculate distance vector
+                        Vector distanceVector = center1 - center2;
+                        double centerDistance = distanceVector.Length;
+
+                        // 3. Define thresholds and push amounts
+                        double avgPetWidth = (pet1.ActualWidth + pet2.ActualWidth) / 2.0;
+                        double avgPetHeight = (pet1.ActualHeight + pet2.ActualHeight) / 2.0;
+                        double avgPetDimension = (avgPetWidth + avgPetHeight) / 2.0; // Approximation of average dimension
+
+                        // Define "very close" as when centers are within 10% of average dimension
+                        double minCenterDistanceThreshold = avgPetDimension * 0.1;
+                        // Define "far apart" as when centers are at 80% of average dimension (but still colliding)
+                        double maxCenterDistanceThreshold = avgPetDimension * 0.8; 
+
+                        double largePushAmount = avgPetDimension * 0.5; // Push by half of average pet dimension
+                        double smallPushAmount = 5.0; // A small fixed distance for glancing blows
+
+                        double pushDistance;
+
+                        if (centerDistance <= minCenterDistanceThreshold)
+                        {
+                            pushDistance = largePushAmount;
+                        }
+                        else if (centerDistance >= maxCenterDistanceThreshold)
+                        {
+                            pushDistance = smallPushAmount;
+                        }
+                        else
+                        {
+                            // Linear interpolation: scale pushDistance between small and large based on centerDistance
+                            // As centerDistance moves from min to max, pushDistance moves from large to small.
+                            double t = (centerDistance - minCenterDistanceThreshold) / (maxCenterDistanceThreshold - minCenterDistanceThreshold);
+                            pushDistance = largePushAmount - (largePushAmount - smallPushAmount) * t;
+                        }
+                        // --- END NEW PUSH AMOUNT CALCULATION ---
+
+                        // Use distanceVector directly for pushDirection
+                        Vector pushDirection = distanceVector;
+                        if (pushDirection.Length < 1) 
+                        {
+                            // If they are exactly on top of each other, give a random push
+                            pushDirection = new Vector(random.NextDouble() - 0.5, random.NextDouble() - 0.5);
+                        }
+                        pushDirection.Normalize(); 
+
+                        // Apply push to both pets
+                        pet1.Left += pushDirection.X * pushDistance; // Use pushDistance
+                        pet1.Top += pushDirection.Y * pushDistance;
+
+                        pet2.Left -= pushDirection.X * pushDistance; // Use pushDistance
+                        pet2.Top -= pushDirection.Y * pushDistance;
+
+                        // When colliding, stop moving and go idle for both pets
+                        if (pet1.currentState == PetState.Walking || pet1.currentState == PetState.Tired)
+                        {
+                           pet1.UpdateState(PetState.Idle);
+                           pet1.walkDirection = 0; 
+                        }
+                        if (pet2.currentState == PetState.Walking || pet2.currentState == PetState.Tired)
+                        {
+                           pet2.UpdateState(PetState.Idle);
+                           pet2.walkDirection = 0;
+                        }
                     }
                 }
             }
@@ -595,6 +661,11 @@ namespace DesktopPet
                 }
             }
             this.Topmost = true;
+
+            // --- Final Clamping to screen boundaries ---
+            this.Left = Math.Max(workArea.Left, Math.Min(workArea.Right - this.ActualWidth, this.Left));
+            this.Top = Math.Max(workArea.Top, Math.Min(workArea.Bottom - this.ActualHeight, this.Top));
+            // --- End Final Clamping ---
         }
 
         
@@ -642,7 +713,7 @@ namespace DesktopPet
 
         
 
-        private Image GetPetImage()
+        public Image GetPetImage()
         {
             return this.FindName("PetImage") as Image;
         }
